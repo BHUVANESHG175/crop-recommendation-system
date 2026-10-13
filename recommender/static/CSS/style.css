@@ -1,0 +1,17 @@
+.hero-gradient {
+    background: linear-gradient(135deg, #2e7d32, #66bb6a);
+}
+
+.stat-tile {
+    background-color: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 1rem;
+    padding: 0.8rem 1rem;
+    color: #fff;
+}
+
+.stat-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1;
+}

@@ -1,0 +1,159 @@
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Edit Profile | Smart Crop Recommender{% endblock %}
+
+{% block content %}
+
+<div class="container py-4 py-lg-5">
+    <div class="row g-4 justify-content-center">
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body p-4 p-md-5">
+
+                    <div class="text-center mb-4">
+                        <i class="fa-solid fa-user-pen fa-3x text-success mb-3"></i>
+                        <h3 class="fw-bold">Edit Profile</h3>
+                        <p class="text-muted mb-0">
+                            Update your personal information below.
+                        </p>
+                    </div>
+
+                    <form method="POST" action="{% url 'profile' %}" id="profileForm">
+                        {% csrf_token %}
+
+                        <!-- Full Name -->
+                        <div class="mb-4">
+                            <label for="profileName" class="form-label fw-semibold">
+                                Full Name
+                            </label>
+
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fa-regular fa-user" aria-hidden="true"></i>
+                                </span>
+
+                                <input
+                                    type="text"
+                                    id="profileName"
+                                    class="form-control"
+                                    name="name"
+                                    value="{{ full_name }}"
+                                    placeholder="e.g., John Doe"
+                                    autocomplete="name"
+                                    maxlength="150"
+                                    required
+                                >
+                            </div>
+
+                            <div class="form-text">
+                                Enter your first and last name.
+                            </div>
+                        </div>
+
+                        <!-- Phone -->
+                        <div class="mb-4">
+                            <label for="profilePhone" class="form-label fw-semibold">
+                                Phone Number
+                            </label>
+
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fa-solid fa-phone" aria-hidden="true"></i>
+                                </span>
+
+                                <input
+                                    type="tel"
+                                    id="profilePhone"
+                                    class="form-control"
+                                    name="phone"
+                                    value="{{ profile.phone|default:'' }}"
+                                    placeholder="e.g., 123-456-7890"
+                                    autocomplete="tel"
+                                    maxlength="20"
+                                    pattern="[0-9+().\-\s]{7,20}"
+                                    required
+                                >
+                            </div>
+
+                            <div class="form-text">
+                                Enter a phone number using 7–20 characters,
+                                including digits and common phone-number symbols.
+                            </div>
+                        </div>
+
+                        <!-- Username -->
+                        <div class="mb-4">
+                            <label for="profileUsername" class="form-label fw-semibold">
+                                Username
+                            </label>
+
+                            <input
+                                type="text"
+                                id="profileUsername"
+                                class="form-control bg-light"
+                                value="{{ request.user.username }}"
+                                readonly
+                            >
+
+                            <div class="form-text">
+                                Your username cannot be changed here.
+                            </div>
+                        </div>
+
+                        <!-- Email -->
+                        <div class="mb-4">
+                            <label for="profileEmail" class="form-label fw-semibold">
+                                Email Address
+                            </label>
+
+                            <input
+                                type="email"
+                                id="profileEmail"
+                                class="form-control"
+                                name="email"
+                                value="{{ request.user.email }}"
+                                placeholder="e.g., john@example.com"
+                                autocomplete="email"
+                                maxlength="254"
+                                required
+                            >
+
+                            <div class="form-text">
+                                Enter a valid email address that is not already
+                                registered to another account.
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="d-flex flex-column flex-sm-row gap-2 mt-4">
+                            <button
+                                class="btn btn-success btn-lg flex-grow-1"
+                                type="submit"
+                            >
+                                <i class="fa-solid fa-floppy-disk me-2" aria-hidden="true"></i>
+                                Save Changes
+                            </button>
+
+                            <a
+                                href="{% url 'predict' %}"
+                                class="btn btn-outline-secondary btn-lg"
+                            >
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+
+                </div>
+            </div>
+
+            <p class="text-muted small text-center mt-3">
+                <i class="fa-solid fa-lock me-1" aria-hidden="true"></i>
+                Your profile information is associated with your account.
+            </p>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
