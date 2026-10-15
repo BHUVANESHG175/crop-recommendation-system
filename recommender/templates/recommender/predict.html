@@ -1,0 +1,92 @@
+{% extends 'recommender/base.html' %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0 rounded-3">
+        <div class="card-body p-4">
+          <h2 class="card-title text-success mb-3">🌱 Crop Recommendation Tool</h2>
+          <p class="text-muted">Enter soil & climate parameters or search location for live weather.</p>
+
+          {% if error_message %}
+            <div class="alert alert-warning border-0 shadow-sm mb-3">{{ error_message }}</div>
+          {% endif %}
+
+          {% if weather_info %}
+            <div class="alert alert-info border-0 shadow-sm mb-3">ℹ️ {{ weather_info }}</div>
+          {% endif %}
+
+          {% if prediction %}
+            <div class="alert alert-success border-0 shadow-sm mb-4 text-center py-3" id="predictionResult">
+              <h4 class="alert-heading mb-1">Recommended Crop:</h4>
+              <span class="display-6 fw-bold text-success">{{ prediction|capfirst }}</span>
+            </div>
+          {% endif %}
+
+          <form method="POST" class="needs-validation">
+            {% csrf_token %}
+            
+            <div class="card bg-light border-0 mb-4">
+              <div class="card-body">
+                <div class="form-check form-switch mb-2">
+                  <input class="form-check-input" type="checkbox" id="use_live_weather" name="use_live_weather">
+                  <label class="form-check-label fw-bold" for="use_live_weather">Auto-fetch Live Weather by Location</label>
+                </div>
+                <div id="cityInputGroup" style="display: none;">
+                  <label class="form-label text-muted small mb-1">Enter City Name</label>
+                  <input type="text" name="city" class="form-control" placeholder="e.g. Nagpur, London, Fresno" value="{{ city|default:'' }}">
+                </div>
+              </div>
+            </div>
+
+            <h5 class="fw-semibold mb-3 text-secondary">Soil Parameters</h5>
+            <div class="row g-3 mb-3">
+              <div class="col-md-3">
+                <label class="form-label">Nitrogen (N)</label>
+                <input type="number" step="any" name="N" class="form-control" required value="{{ inputs.N|default:'' }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Phosphorus (P)</label>
+                <input type="number" step="any" name="P" class="form-control" required value="{{ inputs.P|default:'' }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Potassium (K)</label>
+                <input type="number" step="any" name="K" class="form-control" required value="{{ inputs.K|default:'' }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">pH Level</label>
+                <input type="number" step="any" name="ph" class="form-control" required value="{{ inputs.ph|default:'' }}">
+              </div>
+            </div>
+
+            <h5 class="fw-semibold mb-3 text-secondary">Climate Parameters</h5>
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label class="form-label">Temperature (°C)</label>
+                <input type="number" step="any" name="temperature" class="form-control" required value="{{ inputs.temperature|default:'' }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Humidity (%)</label>
+                <input type="number" step="any" name="humidity" class="form-control" required value="{{ inputs.humidity|default:'' }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Rainfall (mm)</label>
+                <input type="number" step="any" name="rainfall" class="form-control" required value="{{ inputs.rainfall|default:'' }}">
+              </div>
+            </div>
+
+            <button type="submit" id="predictButton" class="btn btn-success btn-lg w-100 mt-3 fw-bold">Get Crop Recommendation</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('use_live_weather').addEventListener('change', function() {
+  document.getElementById('cityInputGroup').style.display = this.checked ? 'block' : 'none';
+});
+</script>
+{% endblock %}

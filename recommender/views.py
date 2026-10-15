@@ -1,63 +1,191 @@
 
-import json
 import logging
 import math
-import re
-from datetime import timedelta
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import (
     authenticate,
     login,
     logout,
     update_session_auth_hash,
 )
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
-from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
-from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
-from django.shortcuts import get_object_or_404, redirect, render
+from django.db import transaction
+from django.db.models import Count
+from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .ml.loader import load_bundle, predict_one
 from .models import Prediction, UserProfile
+from .ml import load_bundle, predict_one
+from .weather import get_coordinates, fetch_climate_data
 
 
 logger = logging.getLogger(__name__)
 
-PHONE_PATTERN = re.compile(r"^[0-9+().\-\s]{7,20}$")
-
-EXPECTED_FEATURES = [
-    "N",
-    "P",
-    "K",
-    "temperature",
-    "humidity",
-    "ph",
-    "rainfall",
-]
+# Load the model once when Django imports this module.
+# If unavailable, predictions fail safely.
+BUNDLE = load_bundle()
 
 
 # ---------------------------------------------------------
-# HOME
+# HELPER FUNCTIONS
+# ---------------------------------------------------------
+
+def is_admin(user):
+    """Return True only for authenticated staff users."""
+    return user.is_authenticated and user.is_staff
+
+
+def safe_redirect_url(request, url, fallback="predict"):
+    """Prevent redirects to untrusted external websites."""
+    if url and url_has_allowed_host_and_scheme(
+        url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(url)
+
+    return redirect(fallback)
+
+
+def parse_number(post_data, field_name):
+    """Read a required numeric field and reject invalid numbers."""
+    raw_value = post_data.get(field_name, "").strip()
+
+    if not raw_value:
+        raise ValueError(f"Please enter a value for {field_name}.")
+
+    try:
+        value = float(raw_value)
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"{field_name} must be a valid number."
+        ) from None
+
+    if not math.isfinite(value):
+        raise ValueError(f"{field_name} must be a finite number.")
+
+    return value
+
+
+def validate_crop_inputs(data):
+    """Validate all measurements before predicting or saving."""
+
+    required_fields = (
+        "N",
+        "P",
+        "K",
+        "temperature",
+        "humidity",
+        "ph",
+        "rainfall",
+    )
+
+    # Check that every required measurement exists and is numeric.
+    for field in required_fields:
+        if field not in data:
+            raise ValueError(
+                "Please provide all required soil and climate values."
+            )
+
+        value = data[field]
+
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+        ):
+            raise ValueError(
+                f"{field} must be a valid finite number."
+            )
+
+    # Explicitly reject an entirely zero-filled submission.
+    if all(data[field] == 0 for field in required_fields):
+        raise ValueError(
+            "All inputs cannot be zero. "
+            "Enter valid soil and climate values."
+        )
+
+    # Common Crop Recommendation dataset ranges.
+    # Verify these against the CSV used to train your model.
+    nutrient_limits = {
+        "N": (0, 140),
+        "P": (5, 145),
+        "K": (5, 205),
+    }
+
+    for field, (minimum, maximum) in nutrient_limits.items():
+        if not minimum <= data[field] <= maximum:
+            raise ValueError(
+                f"{field} must be between {minimum} and {maximum}."
+            )
+
+    if not 8.8 <= data["temperature"] <= 43.7:
+        raise ValueError(
+            "Temperature must be between 8.8°C and 43.7°C."
+        )
+
+    if not 14.2 <= data["humidity"] <= 100:
+        raise ValueError(
+            "Humidity must be between 14.2% and 100%."
+        )
+
+    if not 3.5 <= data["ph"] <= 9.94:
+        raise ValueError(
+            "Soil pH must be between 3.5 and 9.94."
+        )
+
+    if not 20 <= data["rainfall"] <= 300:
+        raise ValueError(
+            "Rainfall must be between 20 and 300 mm."
+        )
+
+    return data
+
+
+def save_prediction_if_logged_in(request, inputs, crop):
+    """Save a prediction only for an authenticated, non-staff user."""
+
+    if (
+        not request.user.is_authenticated
+        or request.user.is_staff
+        or request.user.is_superuser
+    ):
+        return
+
+    Prediction.objects.create(
+        user=request.user,
+        N=inputs["N"],
+        P=inputs["P"],
+        K=inputs["K"],
+        temperature=inputs["temperature"],
+        humidity=inputs["humidity"],
+        ph=inputs["ph"],
+        rainfall=inputs["rainfall"],
+        predicted_label=crop,
+    )
+
+
+def get_prediction_bundle():
+    """Use the loaded model or attempt to load it again."""
+
+    if BUNDLE is not None:
+        return BUNDLE
+
+    return load_bundle()
+
+
+# ---------------------------------------------------------
+# HOME PAGE
 # ---------------------------------------------------------
 
 def home(request):
-    return render(request, "home.html")
-
-
-# ---------------------------------------------------------
-# VALIDATION HELPERS
-# ---------------------------------------------------------
-
-def _valid_phone(phone):
-    """Check whether a phone number contains permitted characters."""
-    return bool(PHONE_PATTERN.fullmatch(phone))
+    """Display the crop prediction page."""
+    return predict_view(request)
 
 
 # ---------------------------------------------------------
@@ -66,110 +194,80 @@ def _valid_phone(phone):
 
 def signup_view(request):
     if request.user.is_authenticated:
-        if request.user.is_staff:
+        if request.user.is_staff or request.user.is_superuser:
             return redirect("admin_dashboard")
         return redirect("predict")
 
     if request.method == "POST":
-        name = request.POST.get("full_name", "").strip()
+        full_name = request.POST.get("full_name", "").strip()
         phone = request.POST.get("phone_number", "").strip()
         email = request.POST.get("email", "").strip().lower()
         password = request.POST.get("password", "")
         confirm_password = request.POST.get("confirm_password", "")
-        accepted_terms = request.POST.get("agree") == "yes"
-
-        if not all([
-            name,
-            phone,
-            email,
-            password,
-            confirm_password,
-        ]):
-            messages.error(
-                request,
-                "Please fill in all required fields.",
-            )
-            return redirect("signup")
-
-        if not accepted_terms:
-            messages.error(
-                request,
-                "Please accept the terms to create an account.",
-            )
-            return redirect("signup")
-
-        if len(name) > 150:
-            messages.error(request, "Your name is too long.")
-            return redirect("signup")
-
-        if not _valid_phone(phone):
-            messages.error(
-                request,
-                "Please enter a valid phone number.",
-            )
-            return redirect("signup")
-
-        if len(email) > 254:
-            messages.error(
-                request,
-                "Email address is too long.",
-            )
-            return redirect("signup")
 
         try:
-            validate_email(email)
-        except ValidationError:
-            messages.error(
-                request,
-                "Please enter a valid email address.",
-            )
-            return redirect("signup")
+            if not full_name:
+                raise ValueError("Please enter your full name.")
 
-        if password != confirm_password:
-            messages.error(
-                request,
-                "Passwords do not match.",
-            )
-            return redirect("signup")
+            if len(full_name) > 150:
+                raise ValueError(
+                    "Full name must be 150 characters or fewer."
+                )
 
-        if User.objects.filter(username__iexact=email).exists():
-            messages.error(
-                request,
-                "An account already exists with this email.",
-            )
-            return redirect("signup")
+            if not email or "@" not in email:
+                raise ValueError("Enter a valid email address.")
 
-        if User.objects.filter(email__iexact=email).exists():
-            messages.error(
-                request,
-                "This email address is already registered.",
-            )
-            return redirect("signup")
+            if len(email) > 254:
+                raise ValueError("Email address is too long.")
 
-        first_name, _, last_name = name.partition(" ")
+            if len(phone) > 20:
+                raise ValueError(
+                    "Phone number must be 20 characters or fewer."
+                )
 
-        candidate_user = User(
-            username=email,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-        )
+            if User.objects.filter(email__iexact=email).exists():
+                raise ValueError(
+                    "An account with that email already exists."
+                )
 
-        try:
-            validate_password(password, user=candidate_user)
-        except ValidationError as error:
-            for error_message in error.messages:
-                messages.error(request, error_message)
-            return redirect("signup")
+            if User.objects.filter(username__iexact=email).exists():
+                raise ValueError(
+                    "An account with that email already exists."
+                )
 
-        try:
+            if not password:
+                raise ValueError("Password is required.")
+
+            if len(password) < 8:
+                raise ValueError(
+                    "Password must contain at least 8 characters."
+                )
+
+            if confirm_password != password:
+                raise ValueError("Passwords do not match.")
+
+            if request.POST.get("agree") not in (
+                "yes",
+                "on",
+                "true",
+                "1",
+            ):
+                raise ValueError(
+                    "Please agree to the terms before creating an account."
+                )
+
+            name_parts = full_name.split(maxsplit=1)
+
+            # Create the user and profile atomically.
             with transaction.atomic():
                 user = User.objects.create_user(
                     username=email,
                     email=email,
                     password=password,
-                    first_name=first_name,
-                    last_name=last_name,
+                    first_name=name_parts[0],
+                    last_name=(
+                        name_parts[1] if len(name_parts) > 1 else ""
+                    ),
                 )
 
                 UserProfile.objects.create(
@@ -177,267 +275,277 @@ def signup_view(request):
                     phone=phone,
                 )
 
-        except IntegrityError:
-            messages.error(
+            messages.success(
                 request,
-                "An account with these details may already exist. "
-                "Please try again.",
+                "Your account was created successfully. Please log in.",
             )
-            return redirect("signup")
+            return redirect("login")
 
-        login(request, user)
+        except ValueError as exc:
+            messages.error(request, str(exc))
 
-        messages.success(
-            request,
-            "Account created successfully.",
-        )
+    return render(request, "recommender/signup.html")
+
+
+# ---------------------------------------------------------
+# USER LOGIN
+# ---------------------------------------------------------
+
+def login_view(request):
+    if request.user.is_authenticated:
+        if request.user.is_staff or request.user.is_superuser:
+            return redirect("admin_dashboard")
         return redirect("predict")
 
-    return render(request, "signup.html")
+    next_url = request.POST.get("next") or request.GET.get("next", "")
+
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "")
+
+        user = authenticate(
+            request,
+            username=username,
+            password=password,
+        )
+
+        # Support login using email for existing accounts.
+        if user is None and username:
+            matching_user = User.objects.filter(
+                email__iexact=username
+            ).first()
+
+            if matching_user:
+                user = authenticate(
+                    request,
+                    username=matching_user.username,
+                    password=password,
+                )
+
+        if user is not None:
+            login(request, user)
+            messages.success(request, "You are now logged in.")
+
+            if user.is_staff or user.is_superuser:
+                return safe_redirect_url(
+                    request,
+                    next_url,
+                    fallback="admin_dashboard",
+                )
+
+            return safe_redirect_url(request, next_url)
+
+        messages.error(request, "Invalid username/email or password.")
+
+    return render(
+        request,
+        "recommender/login.html",
+        {"next": next_url},
+    )
+
+
+# ---------------------------------------------------------
+# USER LOGOUT
+# ---------------------------------------------------------
+
+def logout_view(request):
+    if request.method in ("GET", "POST"):
+        logout(request)
+        messages.success(request, "You have been logged out.")
+
+    return redirect("login")
 
 
 # ---------------------------------------------------------
 # CROP PREDICTION
 # ---------------------------------------------------------
 
-@login_required
+@login_required(login_url="login")
 def predict_view(request):
-    if request.user.is_staff:
+    """Validate inputs, predict a crop, and save valid predictions."""
+
+    if request.user.is_staff or request.user.is_superuser:
         return redirect("admin_dashboard")
 
-    try:
-        bundle = load_bundle()
-        feature_order = bundle["features_cols"]
-
-        if list(feature_order) != EXPECTED_FEATURES:
-            raise ValueError(
-                "The model feature order does not match the application."
-            )
-
-    except Exception:
-        logger.exception(
-            "Could not load the crop recommendation model."
-        )
-
-        messages.error(
-            request,
-            "The prediction service is temporarily unavailable. "
-            "Please try again later.",
-        )
-
-        return render(
-            request,
-            "predict.html",
-            {
-                "result": None,
-                "last_data": None,
-                "feature_order": EXPECTED_FEATURES,
-            },
-            status=503,
-        )
-
-    result = None
-    last_data = None
+    weather_info = None
+    error_message = None
+    inputs = {}
+    prediction = None
+    city = ""
 
     if request.method == "POST":
-        data = {}
-
-        try:
-            for column in feature_order:
-                raw_value = request.POST.get(
-                    column,
-                    "",
-                ).strip()
-
-                if not raw_value:
-                    raise ValueError(
-                        f"{column} is required."
-                    )
-
-                value = float(raw_value)
-
-                if not math.isfinite(value):
-                    raise ValueError(
-                        f"{column} must be a finite number."
-                    )
-
-                data[column] = value
-
-            if not 0 <= data["N"] <= 200:
-                raise ValueError(
-                    "Nitrogen (N) must be between 0 and 200."
-                )
-
-            if not 0 <= data["P"] <= 200:
-                raise ValueError(
-                    "Phosphorus (P) must be between 0 and 200."
-                )
-
-            if not 0 <= data["K"] <= 250:
-                raise ValueError(
-                    "Potassium (K) must be between 0 and 250."
-                )
-
-            if not -10 <= data["temperature"] <= 60:
-                raise ValueError(
-                    "Temperature must be between -10 and 60 °C."
-                )
-
-            if not 0 <= data["humidity"] <= 100:
-                raise ValueError(
-                    "Humidity must be between 0 and 100%."
-                )
-
-            if not 0 <= data["ph"] <= 14:
-                raise ValueError(
-                    "Soil pH must be between 0 and 14."
-                )
-
-            if not 0 <= data["rainfall"] <= 5000:
-                raise ValueError(
-                    "Rainfall must be between 0 and 5000 mm."
-                )
-
-        except (ValueError, TypeError) as error:
-            messages.error(
-                request,
-                str(error) or
-                "Please enter valid numeric values for all fields.",
-            )
-            return redirect("predict")
-
-        try:
-            label = predict_one(data)
-
-            Prediction.objects.create(
-                user=request.user,
-                predicted_label=str(label),
-                **data,
-            )
-
-        except Exception:
-            logger.exception(
-                "Crop prediction failed for user ID %s.",
-                request.user.pk,
-            )
-
-            messages.error(
-                request,
-                "We could not generate a prediction. "
-                "Please check your inputs and try again.",
-            )
-            return redirect("predict")
-
-        result = str(label)
-        last_data = data
-
-        messages.success(
-            request,
-            f"Recommended Crop: {result}",
+        city = request.POST.get("city", "").strip()
+        use_live_weather = (
+            request.POST.get("use_live_weather") == "on"
         )
 
-    return render(
-        request,
-        "predict.html",
-        {
-            "result": result,
-            "last_data": last_data,
-            "feature_order": feature_order,
-        },
-    )
+        try:
+            # Read the required measurements.
+            N = parse_number(request.POST, "N")
+            P = parse_number(request.POST, "P")
+            K = parse_number(request.POST, "K")
+            ph = parse_number(request.POST, "ph")
 
+            temperature = parse_number(request.POST, "temperature")
+            humidity = parse_number(request.POST, "humidity")
+            rainfall = parse_number(request.POST, "rainfall")
 
-# ---------------------------------------------------------
-# LOGIN
-# ---------------------------------------------------------
+            # Use live weather only when valid data is available.
+            if use_live_weather:
+                if not city:
+                    messages.warning(
+                        request,
+                        "Enter a city to use live weather. "
+                        "Manual values will be used.",
+                    )
+                else:
+                    try:
+                        lat, lon, resolved_city = get_coordinates(city)
 
-def login_view(request):
-    if request.user.is_authenticated:
-        if request.user.is_staff:
-            return redirect("admin_dashboard")
-        return redirect("predict")
+                        if lat is not None and lon is not None:
+                            live_data = fetch_climate_data(lat, lon)
 
-    if request.method == "POST":
-        email = request.POST.get("email", "").strip().lower()
-        password = request.POST.get("password", "")
+                            if live_data:
+                                weather_values = {
+                                    "temperature": float(
+                                        live_data["temperature"]
+                                    ),
+                                    "humidity": float(
+                                        live_data["humidity"]
+                                    ),
+                                    "rainfall": float(
+                                        live_data["rainfall"]
+                                    ),
+                                }
 
-        user = authenticate(
-            request,
-            username=email,
-            password=password,
-        )
+                                if not all(
+                                    math.isfinite(value)
+                                    for value in weather_values.values()
+                                ):
+                                    raise ValueError(
+                                        "Weather data contains invalid values."
+                                    )
 
-        if user is not None and user.is_active:
-            login(request, user)
+                                temperature = weather_values["temperature"]
+                                humidity = weather_values["humidity"]
+                                rainfall = weather_values["rainfall"]
+
+                                weather_info = (
+                                    f"Live weather fetched for {resolved_city}: "
+                                    f"{temperature}°C, {humidity}% humidity, "
+                                    f"{rainfall} mm rainfall."
+                                )
+                            else:
+                                messages.warning(
+                                    request,
+                                    "Live weather is unavailable. "
+                                    "Manual climate values will be used.",
+                                )
+                        else:
+                            messages.warning(
+                                request,
+                                "City not found. "
+                                "Manual climate values will be used.",
+                            )
+
+                    except Exception:
+                        logger.exception("Live weather lookup failed.")
+                        messages.warning(
+                            request,
+                            "Could not retrieve live weather. "
+                            "Manual climate values will be used.",
+                        )
+
+            inputs = {
+                "N": N,
+                "P": P,
+                "K": K,
+                "temperature": temperature,
+                "humidity": humidity,
+                "ph": ph,
+                "rainfall": rainfall,
+            }
+
+            # All validation must finish before prediction or saving.
+            validate_crop_inputs(inputs)
+
+            bundle = get_prediction_bundle()
+
+            if bundle is None:
+                raise RuntimeError(
+                    "The trained crop prediction model is unavailable."
+                )
+
+            prediction = predict_one(bundle, inputs)
+
+            if (
+                not isinstance(prediction, str)
+                or not prediction.strip()
+            ):
+                prediction = None
+                raise RuntimeError(
+                    "The model did not return a valid crop recommendation."
+                )
+
+            # Save only after input validation and successful prediction.
+            save_prediction_if_logged_in(
+                request,
+                inputs,
+                prediction,
+            )
 
             messages.success(
                 request,
-                "Logged in successfully.",
+                f"Crop prediction completed: {prediction}.",
             )
 
-            if user.is_staff:
-                return redirect("admin_dashboard")
+        except ValueError as exc:
+            error_message = str(exc)
 
-            return redirect("predict")
+        except Exception:
+            logger.exception("Crop prediction failed.")
+            prediction = None
+            error_message = (
+                "The crop prediction could not be completed. "
+                "Please check your inputs or try again later."
+            )
 
-        messages.error(
-            request,
-            "Invalid email or password.",
-        )
-        return redirect("login")
-
-    return render(request, "login.html")
-
-
-# ---------------------------------------------------------
-# LOGOUT
-# ---------------------------------------------------------
-
-@login_required
-@require_POST
-def logout_view(request):
-    logout(request)
-
-    messages.success(
+    return render(
         request,
-        "Logged out successfully.",
+        "recommender/predict.html",
+        {
+            "prediction": prediction,
+            "weather_info": weather_info,
+            "error_message": error_message,
+            "inputs": inputs,
+            "city": city,
+        },
     )
-
-    return redirect("login")
 
 
 # ---------------------------------------------------------
 # USER PREDICTION HISTORY
 # ---------------------------------------------------------
 
-@login_required
+@login_required(login_url="login")
 def user_history_view(request):
-    if request.user.is_staff:
-        return redirect("admin_dashboard")
-
     predictions = Prediction.objects.filter(
-        user=request.user,
+        user=request.user
     ).order_by("-created_at")
 
     return render(
         request,
-        "history.html",
+        "recommender/user_history.html",
         {
             "predictions": predictions,
+            "history": predictions,
         },
     )
 
 
-# ---------------------------------------------------------
-# DELETE A USER'S OWN PREDICTION
-# ---------------------------------------------------------
-
-@login_required
+@login_required(login_url="login")
 @require_POST
 def user_delete_prediction(request, id):
-    if request.user.is_staff:
-        return redirect("admin_dashboard")
-
     prediction = get_object_or_404(
         Prediction,
         id=id,
@@ -445,11 +553,7 @@ def user_delete_prediction(request, id):
     )
 
     prediction.delete()
-
-    messages.success(
-        request,
-        "Prediction deleted successfully.",
-    )
+    messages.success(request, "Prediction deleted successfully.")
 
     return redirect("user_history")
 
@@ -458,136 +562,35 @@ def user_delete_prediction(request, id):
 # USER PROFILE
 # ---------------------------------------------------------
 
-@login_required
+@login_required(login_url="login")
 def profile_view(request):
-    if request.user.is_staff:
-        return redirect("admin_dashboard")
-
     profile, _ = UserProfile.objects.get_or_create(
-        user=request.user,
+        user=request.user
     )
 
     if request.method == "POST":
-        name = request.POST.get("name", "").strip()
         phone = request.POST.get("phone", "").strip()
-        email = request.POST.get("email", "").strip().lower()
 
-        if not name:
+        if len(phone) > 20:
             messages.error(
                 request,
-                "Name cannot be empty.",
+                "Phone number must be 20 characters or fewer.",
             )
-
-        elif len(name) > 150:
-            messages.error(
-                request,
-                "Your name is too long.",
-            )
-
-        elif phone and not _valid_phone(phone):
-            messages.error(
-                request,
-                "Please enter a valid phone number.",
-            )
-
-        elif not email:
-            messages.error(
-                request,
-                "Email address cannot be empty.",
-            )
-
-        elif len(email) > 254:
-            messages.error(
-                request,
-                "Email address is too long.",
-            )
-
         else:
-            try:
-                validate_email(email)
-
-            except ValidationError:
-                messages.error(
-                    request,
-                    "Please enter a valid email address.",
-                )
-
-            else:
-                duplicate_email = User.objects.filter(
-                    email__iexact=email,
-                ).exclude(
-                    pk=request.user.pk,
-                ).exists()
-
-                duplicate_username = User.objects.filter(
-                    username__iexact=email,
-                ).exclude(
-                    pk=request.user.pk,
-                ).exists()
-
-                if duplicate_email or duplicate_username:
-                    messages.error(
-                        request,
-                        "This email address is already associated "
-                        "with another account.",
-                    )
-
-                else:
-                    first_name, _, last_name = name.partition(" ")
-
-                    try:
-                        with transaction.atomic():
-                            user = User.objects.select_for_update().get(
-                                pk=request.user.pk,
-                            )
-
-                            user.first_name = first_name
-                            user.last_name = last_name
-                            user.email = email
-                            user.username = email
-
-                            user.save(
-                                update_fields=[
-                                    "first_name",
-                                    "last_name",
-                                    "email",
-                                    "username",
-                                ],
-                            )
-
-                            profile.phone = phone
-
-                            profile.save(
-                                update_fields=["phone"],
-                            )
-
-                    except IntegrityError:
-                        messages.error(
-                            request,
-                            "We could not save your changes because "
-                            "the email address may already be in use.",
-                        )
-
-                    else:
-                        # Keep the current session authenticated.
-                        # The username change does not change the password.
-                        messages.success(
-                            request,
-                            "Profile updated successfully.",
-                        )
-
-                        return redirect("profile")
-
-    full_name = (
-        f"{request.user.first_name} {request.user.last_name}"
-    ).strip()
+            profile.phone = phone
+            profile.save(update_fields=["phone"])
+            messages.success(
+                request,
+                "Profile updated successfully.",
+            )
+            return redirect("profile")
 
     return render(
         request,
-        "profile.html",
+        "recommender/profile.html",
         {
             "profile": profile,
-            "full_name": full_name,
+            "user_profile": profile,
         },
     )
 
@@ -596,117 +599,85 @@ def profile_view(request):
 # CHANGE PASSWORD
 # ---------------------------------------------------------
 
-@login_required
+@login_required(login_url="login")
 def change_password_view(request):
     if request.method == "POST":
-        current = request.POST.get("current_password", "")
-        new = request.POST.get("new_password", "")
-        confirm = request.POST.get("confirm_password", "")
+        form = PasswordChangeForm(request.user, request.POST)
 
-        if not request.user.check_password(current):
-            messages.error(
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)
+
+            messages.success(
                 request,
-                "Incorrect current password.",
+                "Your password was changed successfully.",
             )
             return redirect("change_password")
-
-        if new != confirm:
-            messages.error(
-                request,
-                "New passwords do not match.",
-            )
-            return redirect("change_password")
-
-        if request.user.check_password(new):
-            messages.error(
-                request,
-                "Your new password must be different from "
-                "your current password.",
-            )
-            return redirect("change_password")
-
-        try:
-            validate_password(
-                new,
-                user=request.user,
-            )
-
-        except ValidationError as error:
-            for error_message in error.messages:
-                messages.error(request, error_message)
-
-            return redirect("change_password")
-
-        request.user.set_password(new)
-        request.user.save()
-
-        update_session_auth_hash(
-            request,
-            request.user,
-        )
-
-        messages.success(
-            request,
-            "Password changed successfully.",
-        )
-
-        return redirect("change_password")
+    else:
+        form = PasswordChangeForm(request.user)
 
     return render(
         request,
-        "change_password.html",
+        "recommender/change_password.html",
+        {"form": form},
     )
 
 
 # ---------------------------------------------------------
-# ADMIN LOGIN
+# CUSTOM ADMIN LOGIN
 # ---------------------------------------------------------
 
 def admin_login_view(request):
-    if request.user.is_authenticated and request.user.is_staff:
+    if request.user.is_authenticated and (
+        request.user.is_staff or request.user.is_superuser
+    ):
         return redirect("admin_dashboard")
 
+    next_url = request.POST.get("next") or request.GET.get("next", "")
+
     if request.method == "POST":
-        email = request.POST.get("email", "").strip().lower()
+        username = request.POST.get("username", "").strip()
         password = request.POST.get("password", "")
 
-        try:
-            user = User.objects.get(
-                email__iexact=email,
-            )
+        user = authenticate(
+            request,
+            username=username,
+            password=password,
+        )
 
-        except User.DoesNotExist:
-            user = None
+        if user is None and username:
+            matching_user = User.objects.filter(
+                email__iexact=username
+            ).first()
 
-        if user is not None and user.is_active and user.is_staff:
-            authenticated_user = authenticate(
+            if matching_user:
+                user = authenticate(
+                    request,
+                    username=matching_user.username,
+                    password=password,
+                )
+
+        if user is not None and (
+            user.is_staff or user.is_superuser
+        ):
+            login(request, user)
+            messages.success(request, "Admin login successful.")
+
+            return safe_redirect_url(
                 request,
-                username=user.username,
-                password=password,
+                next_url,
+                fallback="admin_dashboard",
             )
-
-            if authenticated_user is not None:
-                login(
-                    request,
-                    authenticated_user,
-                )
-
-                messages.success(
-                    request,
-                    "Admin login successful.",
-                )
-
-                return redirect("admin_dashboard")
 
         messages.error(
             request,
-            "Invalid email or password, or you do not have "
-            "admin access.",
+            "Invalid credentials or insufficient permissions.",
         )
 
     return render(
         request,
-        "admin_login.html",
+        "recommender/admin_login.html",
+        {"next": next_url},
     )
 
 
@@ -714,7 +685,7 @@ def admin_login_view(request):
 # ADMIN DASHBOARD
 # ---------------------------------------------------------
 
-@staff_member_required(login_url="admin_login")
+@user_passes_test(is_admin, login_url="admin_login")
 def admin_dashboard_view(request):
     today = timezone.localdate()
 
@@ -731,160 +702,67 @@ def admin_dashboard_view(request):
 
     crop_stats = list(
         Prediction.objects.values("predicted_label")
-        .annotate(total=Count("id"))
-        .order_by("-total")
+        .annotate(count=Count("id"))
+        .order_by("-count")
     )
 
-    most_recommended = (
-        crop_stats[0]["predicted_label"]
-        if crop_stats
-        else "No predictions yet"
-    )
-
-    recent_predictions = (
-        Prediction.objects.select_related("user")
-        .order_by("-created_at")[:10]
-    )
-
-    last_7_days = [
-        today - timedelta(days=days_ago)
-        for days_ago in range(6, -1, -1)
-    ]
-
-    daily_stats = (
-        Prediction.objects.filter(
-            created_at__date__gte=last_7_days[0],
-            created_at__date__lte=today,
-        )
-        .values("created_at__date")
-        .annotate(total=Count("id"))
-        .order_by("created_at__date")
-    )
-
-    stats_by_date = {
-        item["created_at__date"]: item["total"]
-        for item in daily_stats
-    }
-
-    prediction_dates = [
-        day.strftime("%b %d")
-        for day in last_7_days
-    ]
-
-    prediction_counts = [
-        stats_by_date.get(day, 0)
-        for day in last_7_days
-    ]
+    recent_predictions = Prediction.objects.select_related(
+        "user"
+    ).order_by("-created_at")[:10]
 
     context = {
         "total_users": total_users,
         "total_predictions": total_predictions,
         "predictions_today": predictions_today,
-        "most_recommended_crop": most_recommended,
+        "crop_stats": crop_stats,
         "recent_predictions": recent_predictions,
-        "crop_labels": json.dumps(
-            [item["predicted_label"] for item in crop_stats]
-        ),
-        "crop_counts": json.dumps(
-            [item["total"] for item in crop_stats]
-        ),
-        "prediction_dates": json.dumps(prediction_dates),
-        "prediction_counts": json.dumps(prediction_counts),
     }
 
     return render(
         request,
-        "admin_dashboard.html",
+        "recommender/admin_dashboard.html",
         context,
     )
 
 
 # ---------------------------------------------------------
-# ADMIN: VIEW AND SEARCH USERS
+# ADMIN: VIEW USERS
 # ---------------------------------------------------------
 
-@staff_member_required(login_url="admin_login")
+@user_passes_test(is_admin, login_url="admin_login")
 def admin_view_users_view(request):
-    search_query = request.GET.get("q", "").strip()
-
-    # Only regular user accounts appear in this management page.
-    registered_users = User.objects.filter(
-        is_staff=False,
+    users = User.objects.filter(
         is_superuser=False,
-    )
-
-    # Count all regular users, regardless of the search term.
-    total_registered_users = registered_users.count()
-
-    users = registered_users.order_by("-date_joined")
-
-    if search_query:
-        users = users.filter(
-            Q(username__icontains=search_query)
-            | Q(email__icontains=search_query)
-            | Q(first_name__icontains=search_query)
-            | Q(last_name__icontains=search_query)
-        )
+        is_staff=False,
+    ).order_by("username")
 
     return render(
         request,
-        "admin_view_users.html",
-        {
-            "users": users,
-            "search_query": search_query,
-            "total_registered_users": total_registered_users,
-        },
+        "recommender/admin_view_users.html",
+        {"users": users},
     )
 
 
 # ---------------------------------------------------------
-# ADMIN: DELETE INACTIVE USERS
+# ADMIN: DELETE INACTIVE USER
 # ---------------------------------------------------------
 
-
-@staff_member_required(login_url="admin_login")
+@user_passes_test(is_admin, login_url="admin_login")
 @require_POST
 def delete_inactive_user_view(request, user_id):
     user = get_object_or_404(
-        User,
-        pk=user_id,
+        User.objects.filter(
+            is_active=False,
+            is_staff=False,
+            is_superuser=False,
+        ),
+        id=user_id,
     )
 
-    # Protect staff and superuser accounts.
-    if user.is_staff or user.is_superuser:
-        messages.error(
-            request,
-            "Staff and superuser accounts cannot be deleted here.",
-        )
-        return redirect("admin_view_users")
-
-    # Prevent an admin from deleting their own account.
-    if user.pk == request.user.pk:
-        messages.error(
-            request,
-            "You cannot delete your own account here.",
-        )
-        return redirect("admin_view_users")
-
-    username = user.username
-
-    try:
-        user.delete()
-    except Exception:
-        logger.exception(
-            "Failed to delete user ID %s by admin ID %s.",
-            user_id,
-            request.user.pk,
-        )
-        messages.error(
-            request,
-            "The user could not be deleted. Please try again.",
-        )
-        return redirect("admin_view_users")
+    user.delete()
 
     messages.success(
         request,
-        f'User "{username}" was deleted successfully.',
+        "Inactive user deleted successfully.",
     )
-
     return redirect("admin_view_users")

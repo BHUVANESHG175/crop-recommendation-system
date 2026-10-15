@@ -1,387 +1,92 @@
-{% extends "base.html" %}
-{% load static %}
-
-{% block title %}Crop Prediction | Smart Crop Recommender{% endblock %}
+{% extends 'recommender/base.html' %}
 
 {% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0 rounded-3">
+        <div class="card-body p-4">
+          <h2 class="card-title text-success mb-3">🌱 Crop Recommendation Tool</h2>
+          <p class="text-muted">Enter soil & climate parameters or search location for live weather.</p>
 
-<div class="container py-4 py-lg-5">
+          {% if error_message %}
+            <div class="alert alert-warning border-0 shadow-sm mb-3">{{ error_message }}</div>
+          {% endif %}
 
-    <!-- Page Header -->
-    <div class="text-center mb-5">
-        <div class="mb-3">
-            <i class="fa-solid fa-seedling fa-3x text-success"></i>
-        </div>
+          {% if weather_info %}
+            <div class="alert alert-info border-0 shadow-sm mb-3">ℹ️ {{ weather_info }}</div>
+          {% endif %}
 
-        <h1 class="fw-bold">Crop Recommendation</h1>
+          {% if prediction %}
+            <div class="alert alert-success border-0 shadow-sm mb-4 text-center py-3" id="predictionResult">
+              <h4 class="alert-heading mb-1">Recommended Crop:</h4>
+              <span class="display-6 fw-bold text-success">{{ prediction|capfirst }}</span>
+            </div>
+          {% endif %}
 
-        <p class="text-muted mx-auto" style="max-width: 700px;">
-            Enter your soil nutrient levels and environmental conditions.
-            Our machine learning model will recommend a crop based on
-            the values you provide.
-        </p>
-    </div>
-
-    <!-- Prediction Form -->
-    <div class="row justify-content-center">
-        <div class="col-lg-9 col-xl-8">
-
-            <div class="card border-0 shadow rounded-4">
-                <div class="card-body p-4 p-md-5">
-
-                    <div class="d-flex align-items-center mb-4">
-                        <i class="fa-solid fa-flask text-success fa-2x me-3"></i>
-
-                        <div>
-                            <h4 class="fw-bold mb-1">Soil and Weather Parameters</h4>
-                            <p class="text-muted mb-0 small">
-                                All seven parameters are required.
-                            </p>
-                        </div>
-                    </div>
-
-                    <form method="POST" action="{% url 'predict' %}" id="predictionForm">
-                        {% csrf_token %}
-
-                        <div class="row g-4">
-
-                            <!-- Nitrogen -->
-                            <div class="col-md-6">
-                                <label for="N" class="form-label fw-semibold">
-                                    Nitrogen (N)
-                                </label>
-
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fa-solid fa-leaf text-success"></i>
-                                    </span>
-
-                                    <input
-                                        type="number"
-                                        class="form-control"
-                                        id="N"
-                                        name="N"
-                                        min="0"
-                                        max="300"
-                                        step="any"
-                                        placeholder="e.g. 90"
-                                        value="{{ last_data.N|default_if_none:'' }}"
-                                        required
-                                    >
-                                </div>
-
-                                <div class="form-text">
-                                    Soil nitrogen level.
-                                </div>
-                            </div>
-
-                            <!-- Phosphorus -->
-                            <div class="col-md-6">
-                                <label for="P" class="form-label fw-semibold">
-                                    Phosphorus (P)
-                                </label>
-
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fa-solid fa-seedling text-success"></i>
-                                    </span>
-
-                                    <input
-                                        type="number"
-                                        class="form-control"
-                                        id="P"
-                                        name="P"
-                                        min="0"
-                                        max="300"
-                                        step="any"
-                                        placeholder="e.g. 40"
-                                        value="{{ last_data.P|default_if_none:'' }}"
-                                        required
-                                    >
-                                </div>
-
-                                <div class="form-text">
-                                    Soil phosphorus level.
-                                </div>
-                            </div>
-
-                            <!-- Potassium -->
-                            <div class="col-md-6">
-                                <label for="K" class="form-label fw-semibold">
-                                    Potassium (K)
-                                </label>
-
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fa-solid fa-mountain-sun text-success"></i>
-                                    </span>
-
-                                    <input
-                                        type="number"
-                                        class="form-control"
-                                        id="K"
-                                        name="K"
-                                        min="0"
-                                        max="300"
-                                        step="any"
-                                        placeholder="e.g. 30"
-                                        value="{{ last_data.K|default_if_none:'' }}"
-                                        required
-                                    >
-                                </div>
-
-                                <div class="form-text">
-                                    Soil potassium level.
-                                </div>
-                            </div>
-
-                            <!-- Temperature -->
-                            <div class="col-md-6">
-                                <label for="temperature" class="form-label fw-semibold">
-                                    Temperature (°C)
-                                </label>
-
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fa-solid fa-temperature-half text-success"></i>
-                                    </span>
-
-                                    <input
-                                        type="number"
-                                        class="form-control"
-                                        id="temperature"
-                                        name="temperature"
-                                        min="-10"
-                                        max="60"
-                                        step="any"
-                                        placeholder="e.g. 25"
-                                        value="{{ last_data.temperature|default_if_none:'' }}"
-                                        required
-                                    >
-                                </div>
-
-                                <div class="form-text">
-                                    Ambient temperature in degrees Celsius.
-                                </div>
-                            </div>
-
-                            <!-- Humidity -->
-                            <div class="col-md-6">
-                                <label for="humidity" class="form-label fw-semibold">
-                                    Humidity (%)
-                                </label>
-
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fa-solid fa-droplet text-success"></i>
-                                    </span>
-
-                                    <input
-                                        type="number"
-                                        class="form-control"
-                                        id="humidity"
-                                        name="humidity"
-                                        min="0"
-                                        max="100"
-                                        step="any"
-                                        placeholder="e.g. 80"
-                                        value="{{ last_data.humidity|default_if_none:'' }}"
-                                        required
-                                    >
-                                </div>
-
-                                <div class="form-text">
-                                    Relative humidity from 0% to 100%.
-                                </div>
-                            </div>
-
-                            <!-- pH -->
-                            <div class="col-md-6">
-                                <label for="ph" class="form-label fw-semibold">
-                                    Soil pH
-                                </label>
-
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fa-solid fa-vial text-success"></i>
-                                    </span>
-
-                                    <input
-                                        type="number"
-                                        class="form-control"
-                                        id="ph"
-                                        name="ph"
-                                        min="0"
-                                        max="14"
-                                        step="any"
-                                        placeholder="e.g. 6.5"
-                                        value="{{ last_data.ph|default_if_none:'' }}"
-                                        required
-                                    >
-                                </div>
-
-                                <div class="form-text">
-                                    Soil acidity or alkalinity, from 0 to 14.
-                                </div>
-                            </div>
-
-                            <!-- Rainfall -->
-                            <div class="col-12">
-                                <label for="rainfall" class="form-label fw-semibold">
-                                    Rainfall (mm)
-                                </label>
-
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fa-solid fa-cloud-rain text-success"></i>
-                                    </span>
-
-                                    <input
-                                        type="number"
-                                        class="form-control"
-                                        id="rainfall"
-                                        name="rainfall"
-                                        min="0"
-                                        max="5000"
-                                        step="any"
-                                        placeholder="e.g. 100"
-                                        value="{{ last_data.rainfall|default_if_none:'' }}"
-                                        required
-                                    >
-                                </div>
-
-                                <div class="form-text">
-                                    Rainfall in millimeters, using the same
-                                    measurement period as the training data.
-                                </div>
-                            </div>
-
-                        </div>
-
-                        <!-- Form Actions -->
-                        <div class="d-flex flex-column flex-sm-row gap-3 mt-5">
-
-                            <button
-                                type="submit"
-                                class="btn btn-success btn-lg flex-grow-1"
-                                id="predictButton"
-                            >
-                                <i class="fa-solid fa-wand-magic-sparkles me-2"></i>
-                                Get Crop Recommendation
-                            </button>
-
-                            <button
-                                type="button"
-                                class="btn btn-outline-secondary btn-lg"
-                                id="sampleButton"
-                            >
-                                <i class="fa-solid fa-flask me-2"></i>
-                                Load Sample
-                            </button>
-
-                            <button
-                                type="reset"
-                                class="btn btn-outline-danger btn-lg"
-                            >
-                                <i class="fa-solid fa-rotate-left me-2"></i>
-                                Reset
-                            </button>
-
-                        </div>
-
-                        <p class="text-muted small mt-3 mb-0">
-                            <i class="fa-solid fa-circle-info me-1"></i>
-                            Recommendations depend on the quality of the input
-                            data and the model's training data. They should not
-                            replace local agricultural advice or soil testing.
-                        </p>
-
-                    </form>
+          <form method="POST" class="needs-validation">
+            {% csrf_token %}
+            
+            <div class="card bg-light border-0 mb-4">
+              <div class="card-body">
+                <div class="form-check form-switch mb-2">
+                  <input class="form-check-input" type="checkbox" id="use_live_weather" name="use_live_weather">
+                  <label class="form-check-label fw-bold" for="use_live_weather">Auto-fetch Live Weather by Location</label>
                 </div>
+                <div id="cityInputGroup" style="display: none;">
+                  <label class="form-label text-muted small mb-1">Enter City Name</label>
+                  <input type="text" name="city" class="form-control" placeholder="e.g. Nagpur, London, Fresno" value="{{ city|default:'' }}">
+                </div>
+              </div>
             </div>
 
-            <!-- Prediction Result -->
-            {% if result %}
-            <div class="card border-0 shadow rounded-4 mt-4">
-                <div class="card-body p-4 p-md-5 text-center">
-
-                    <div class="mb-3">
-                        <i class="fa-solid fa-circle-check fa-3x text-success"></i>
-                    </div>
-
-                    <h3 class="fw-bold">Recommended Crop</h3>
-
-                    <p class="text-muted mb-2">
-                        Based on the soil and weather values you entered,
-                        the model recommends:
-                    </p>
-
-                    <div class="bg-success-subtle rounded-4 p-4 mt-3">
-                        <h2 class="text-success fw-bold text-capitalize mb-0">
-                            {{ result }}
-                        </h2>
-                    </div>
-
-                    <p class="text-muted small mt-3 mb-0">
-                        This prediction has been saved to your account's history.
-                    </p>
-
-                    <a href="{% url 'user_history' %}" class="btn btn-outline-success mt-4">
-                        <i class="fa-solid fa-clock-rotate-left me-2"></i>
-                        View Prediction History
-                    </a>
-
-                </div>
+            <h5 class="fw-semibold mb-3 text-secondary">Soil Parameters</h5>
+            <div class="row g-3 mb-3">
+              <div class="col-md-3">
+                <label class="form-label">Nitrogen (N)</label>
+                <input type="number" step="any" name="N" class="form-control" required value="{{ inputs.N|default:'' }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Phosphorus (P)</label>
+                <input type="number" step="any" name="P" class="form-control" required value="{{ inputs.P|default:'' }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Potassium (K)</label>
+                <input type="number" step="any" name="K" class="form-control" required value="{{ inputs.K|default:'' }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">pH Level</label>
+                <input type="number" step="any" name="ph" class="form-control" required value="{{ inputs.ph|default:'' }}">
+              </div>
             </div>
-            {% endif %}
 
+            <h5 class="fw-semibold mb-3 text-secondary">Climate Parameters</h5>
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label class="form-label">Temperature (°C)</label>
+                <input type="number" step="any" name="temperature" class="form-control" required value="{{ inputs.temperature|default:'' }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Humidity (%)</label>
+                <input type="number" step="any" name="humidity" class="form-control" required value="{{ inputs.humidity|default:'' }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Rainfall (mm)</label>
+                <input type="number" step="any" name="rainfall" class="form-control" required value="{{ inputs.rainfall|default:'' }}">
+              </div>
+            </div>
+
+            <button type="submit" id="predictButton" class="btn btn-success btn-lg w-100 mt-3 fw-bold">Get Crop Recommendation</button>
+          </form>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const form = document.getElementById("predictionForm");
-        const sampleButton = document.getElementById("sampleButton");
-
-        if (!form || !sampleButton) {
-            return;
-        }
-
-        const sampleValues = {
-            N: 90,
-            P: 40,
-            K: 30,
-            temperature: 25,
-            humidity: 80,
-            ph: 6.5,
-            rainfall: 100
-        };
-
-        sampleButton.addEventListener("click", function () {
-            Object.entries(sampleValues).forEach(function ([name, value]) {
-                const field = form.elements.namedItem(name);
-
-                if (field) {
-                    field.value = value;
-                }
-            });
-        });
-
-        form.addEventListener("reset", function () {
-            window.setTimeout(function () {
-                form.querySelectorAll("input[type='number']").forEach(function (field) {
-                    field.setCustomValidity("");
-                });
-            }, 0);
-        });
-
-        form.querySelectorAll("input[type='number']").forEach(function (field) {
-            field.addEventListener("input", function () {
-                field.setCustomValidity("");
-            });
-        });
-    });
+document.getElementById('use_live_weather').addEventListener('change', function() {
+  document.getElementById('cityInputGroup').style.display = this.checked ? 'block' : 'none';
+});
 </script>
-
 {% endblock %}

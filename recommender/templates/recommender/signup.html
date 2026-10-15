@@ -1,0 +1,344 @@
+
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sign Up | Smart Crop Recommender{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+
+        <div class="card shadow-lg border-0 overflow-hidden">
+            <div class="row g-0">
+
+                <!-- Left Image Section -->
+                <div
+                    class="col-md-6 position-relative d-none d-md-block"
+                    style="background: url('{% static 'images/carousel4.png' %}') center/cover no-repeat; min-height: 600px;"
+                >
+                    <div class="position-absolute bottom-0 start-0 p-4 text-white"
+                         style="background: linear-gradient(transparent, rgba(0,0,0,0.85)); width: 100%;">
+
+                        <h4 class="fw-bold mb-2">
+                            Welcome to Crop Recommender
+                        </h4>
+
+                        <p class="small mb-3">
+                            Create an account and explore personalized
+                            crop recommendations for your farming needs.
+                        </p>
+
+                        <ul class="list-unstyled mb-0">
+                            <li class="small mb-2">
+                                <i class="fa-solid fa-check text-success me-2"></i>
+                                Machine Learning Predictions
+                            </li>
+                            <li class="small mb-2">
+                                <i class="fa-solid fa-check text-success me-2"></i>
+                                User-Friendly Interface
+                            </li>
+                            <li class="small mb-2">
+                                <i class="fa-solid fa-check text-success me-2"></i>
+                                Personal Prediction History
+                            </li>
+                            <li class="small">
+                                <i class="fa-solid fa-check text-success me-2"></i>
+                                Easy-to-Use Tools
+                            </li>
+                        </ul>
+
+                    </div>
+                </div>
+
+                <!-- Signup Form -->
+                <div class="col-md-6 bg-white">
+                    <div class="p-4 p-lg-5">
+
+                        <h3 class="mb-2">
+                            <i class="fa-solid fa-user-plus"></i>
+                            Create Account
+                        </h3>
+
+                        <p class="text-muted small mb-4">
+                            Enter your information to get started.
+                        </p>
+
+                        <form method="POST"
+                              id="signup-form"
+                              action="{% url 'signup' %}">
+                            {% csrf_token %}
+
+                            <div class="row g-3">
+
+                                <!-- Full Name -->
+                                <div class="col-12">
+                                    <label for="full_name" class="form-label">
+                                        Full Name
+                                    </label>
+
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="fa-regular fa-user"></i>
+                                        </span>
+
+                                        <input
+                                            type="text"
+                                            class="form-control"
+                                            id="full_name"
+                                            name="full_name"
+                                            placeholder="e.g., John Doe"
+                                            autocomplete="name"
+                                            maxlength="150"
+                                            required
+                                        >
+                                    </div>
+                                </div>
+
+                                <!-- Phone -->
+                                <div class="col-12">
+                                    <label for="phone_number" class="form-label">
+                                        Phone Number
+                                    </label>
+
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="fa-solid fa-phone"></i>
+                                        </span>
+
+                                        <input
+                                            type="tel"
+                                            class="form-control"
+                                            id="phone_number"
+                                            name="phone_number"
+                                            placeholder="e.g., 123-456-7890"
+                                            autocomplete="tel"
+                                            maxlength="20"
+                                            pattern="[0-9+().\-\s]{7,20}"
+                                            title="Enter a valid phone number."
+                                            required
+                                        >
+                                    </div>
+                                </div>
+
+                                <!-- Email -->
+                                <div class="col-12">
+                                    <label for="email" class="form-label">
+                                        Email
+                                    </label>
+
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="fa-regular fa-envelope"></i>
+                                        </span>
+
+                                        <input
+                                            type="email"
+                                            class="form-control"
+                                            id="email"
+                                            name="email"
+                                            placeholder="e.g., test@example.com"
+                                            autocomplete="email"
+                                            maxlength="254"
+                                            required
+                                        >
+                                    </div>
+                                </div>
+
+                                <!-- Password -->
+                                <div class="col-12">
+                                    <label for="pwd1" class="form-label">
+                                        Password
+                                        <span class="text-muted small">
+                                            (minimum 8 characters)
+                                        </span>
+                                    </label>
+
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="fa-solid fa-key"></i>
+                                        </span>
+
+                                        <input
+                                            type="password"
+                                            class="form-control"
+                                            name="password"
+                                            id="pwd1"
+                                            placeholder="Enter password"
+                                            autocomplete="new-password"
+                                            minlength="8"
+                                            required
+                                        >
+
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline-secondary"
+                                            id="togglePassword"
+                                            aria-label="Show password"
+                                        >
+                                            <i class="fa-regular fa-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Confirm Password -->
+                                <div class="col-12">
+                                    <label for="pwd2" class="form-label">
+                                        Confirm Password
+                                    </label>
+
+                                    <div class="input-group">
+                                        <span class="input-group-text">
+                                            <i class="fa-solid fa-shield-halved"></i>
+                                        </span>
+
+                                        <input
+                                            type="password"
+                                            class="form-control"
+                                            id="pwd2"
+                                            name="confirm_password"
+                                            placeholder="Confirm password"
+                                            autocomplete="new-password"
+                                            minlength="8"
+                                            required
+                                        >
+
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline-secondary"
+                                            id="togglePassword2"
+                                            aria-label="Show confirm password"
+                                        >
+                                            <i class="fa-regular fa-eye"></i>
+                                        </button>
+                                    </div>
+
+                                    <div id="passwordError"
+                                         class="text-danger small mt-1"
+                                         style="display: none;">
+                                        Passwords do not match.
+                                    </div>
+                                </div>
+
+                                <!-- Terms -->
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input
+                                            class="form-check-input"
+                                            type="checkbox"
+                                            id="agree"
+                                            name="agree"
+                                            value="yes"
+                                            required
+                                        >
+
+                                        <label class="form-check-label small"
+                                               for="agree">
+                                            I agree to the
+                                            <a href="#">Terms and Conditions</a>
+                                        </label>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <!-- Submit -->
+                            <button
+                                class="btn btn-success w-100 mt-4"
+                                type="submit"
+                                id="signupBtn"
+                            >
+                                <i class="fa-solid fa-user-plus me-1"></i>
+                                Create Account
+                            </button>
+
+                            <div class="text-center mt-3">
+                                <span class="text-muted small">
+                                    Already have an account?
+                                </span>
+
+                                <a href="{% url 'login' %}"
+                                   class="small text-decoration-none ms-1">
+                                    <i class="fa-solid fa-right-to-bracket"></i>
+                                    Login
+                                </a>
+                            </div>
+
+                        </form>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Password Visibility and Validation -->
+<script>
+(function () {
+    const form = document.getElementById("signup-form");
+    const password = document.getElementById("pwd1");
+    const confirmPassword = document.getElementById("pwd2");
+    const passwordError = document.getElementById("passwordError");
+
+    if (!form || !password || !confirmPassword || !passwordError) {
+        return;
+    }
+
+    function setupPasswordToggle(input, button) {
+        if (!button) return;
+
+        button.addEventListener("click", function () {
+            const showing = input.type === "password";
+
+            input.type = showing ? "text" : "password";
+
+            button.innerHTML = showing
+                ? '<i class="fa-regular fa-eye-slash"></i>'
+                : '<i class="fa-regular fa-eye"></i>';
+
+            button.setAttribute(
+                "aria-label",
+                showing ? "Hide password" : "Show password"
+            );
+        });
+    }
+
+    setupPasswordToggle(
+        password,
+        document.getElementById("togglePassword")
+    );
+
+    setupPasswordToggle(
+        confirmPassword,
+        document.getElementById("togglePassword2")
+    );
+
+    function checkPasswords() {
+        const matches = password.value === confirmPassword.value;
+
+        confirmPassword.setCustomValidity(
+            matches ? "" : "Passwords do not match."
+        );
+
+        passwordError.style.display =
+            confirmPassword.value && !matches ? "block" : "none";
+
+        return matches;
+    }
+
+    confirmPassword.addEventListener("input", checkPasswords);
+    password.addEventListener("input", checkPasswords);
+
+    form.addEventListener("submit", function (event) {
+        if (!checkPasswords()) {
+            event.preventDefault();
+            confirmPassword.reportValidity();
+        }
+    });
+})();
+</script>
+
+{% endblock %}

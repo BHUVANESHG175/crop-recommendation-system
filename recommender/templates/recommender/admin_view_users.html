@@ -1,0 +1,235 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Page Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">Registered Users</h2>
+            <p class="text-muted mb-0">
+                View, search, and manage registered users in the Crop Recommendation System.
+            </p>
+        </div>
+
+        <a href="{% url 'admin_dashboard' %}"
+           class="btn btn-outline-secondary mt-2">
+            &larr; Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-info alert-dismissible fade show"
+                 role="alert">
+                {{ message }}
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="alert"
+                        aria-label="Close">
+                </button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Total Registered Users -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="text-muted">Total Registered Users</h6>
+                    <h2 class="fw-bold">
+                        {{ total_registered_users|default:users.count }}
+                    </h2>
+                    <small class="text-muted">
+                        Regular user accounts
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Users -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <form method="GET"
+                  action="{% url 'admin_view_users' %}"
+                  class="row g-2">
+
+                <div class="col-md-9">
+                    <label for="user-search" class="visually-hidden">
+                        Search users
+                    </label>
+
+                    <input
+                        id="user-search"
+                        type="search"
+                        name="q"
+                        class="form-control"
+                        placeholder="Search by username, email, or name..."
+                        value="{{ search_query }}"
+                        maxlength="254"
+                    >
+                </div>
+
+                <div class="col-md-3 d-flex gap-2">
+                    <button type="submit"
+                            class="btn btn-success flex-grow-1">
+                        Search
+                    </button>
+
+                    {% if search_query %}
+                        <a href="{% url 'admin_view_users' %}"
+                           class="btn btn-outline-secondary">
+                            Clear
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Registered Users Table -->
+    <div class="card shadow-sm border-0">
+
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0">User Accounts</h5>
+        </div>
+
+        <div class="card-body">
+
+            <p class="text-muted">
+                {% if search_query %}
+                    Matching users: {{ users.count }}
+                {% else %}
+                    Showing {{ users.count }} users
+                {% endif %}
+            </p>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped table-hover align-middle">
+
+                    <thead class="table-dark">
+                        <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">Username</th>
+                            <th scope="col">Email Address</th>
+                            <th scope="col">First Name</th>
+                            <th scope="col">Last Name</th>
+                            <th scope="col">Date Joined</th>
+                            <th scope="col">Last Login</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for user in users %}
+                            <tr>
+                                <td>{{ forloop.counter }}</td>
+
+                                <td>
+                                    <strong>{{ user.username }}</strong>
+                                </td>
+
+                                <td>
+                                    {{ user.email|default:"Not provided" }}
+                                </td>
+
+                                <td>
+                                    {{ user.first_name|default:"—" }}
+                                </td>
+
+                                <td>
+                                    {{ user.last_name|default:"—" }}
+                                </td>
+
+                                <td>
+                                    {{ user.date_joined|date:"M d, Y" }}
+                                </td>
+
+                                <td>
+                                    {% if user.last_login %}
+                                        {{ user.last_login|date:"M d, Y, g:i A" }}
+                                    {% else %}
+                                        <span class="text-muted">
+                                            Never logged in
+                                        </span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if user.is_active %}
+                                        <span class="badge bg-success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+
+                                <!-- Delete User -->
+                                <td>
+                                    {% if not user.is_staff and not user.is_superuser and user.id != request.user.id %}
+                                        <form method="POST"
+                                              action="{% url 'delete_inactive_user' user.id %}"
+                                              onsubmit="return confirm('Are you sure you want to permanently delete this user and their associated predictions? This action cannot be undone.');">
+
+                                            {% csrf_token %}
+
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-danger">
+                                                Delete
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="text-muted">
+                                            Protected
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+
+                        {% empty %}
+                            <tr>
+                                <td colspan="9"
+                                    class="text-center py-4">
+
+                                    {% if search_query %}
+                                        No users match "{{ search_query }}".
+                                        <br>
+                                        Try another search.
+                                    {% else %}
+                                        No registered users found.
+                                    {% endif %}
+
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="card-footer bg-white text-muted">
+            {% if search_query %}
+                {{ users.count }} matching result(s)
+                out of
+                {{ total_registered_users|default:users.count }}
+                registered users.
+            {% else %}
+                Total registered users:
+                {{ total_registered_users|default:users.count }}
+            {% endif %}
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
