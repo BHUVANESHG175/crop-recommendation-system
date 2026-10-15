@@ -1,182 +1,245 @@
+
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Home | Smart Crop Recommender{% endblock %}
+{% block title %}Smart Crop Recommender | Smarter Farming{% endblock %}
 
 {% block content %}
+<div class="crop-home">
 
-<section class="hero-gradient rounded-4 p-4 p-lg-5 mb-5 text-black shadow-lg">
-    <div class="row align-items-center">
+    <!-- Hero Section -->
+    <section class="crop-hero">
+        <div class="crop-hero-image"></div>
+        <div class="crop-hero-overlay"></div>
 
-        <!-- Hero Content -->
-        <div class="col-lg-7">
-            <h1 class="display-5 fw-bold mb-3">
-                Smart Crop Recommender
-            </h1>
+        <div class="crop-hero-content">
+            <span class="crop-eyebrow">
+                <i class="fa-solid fa-seedling"></i>
+                SMART AGRICULTURE • MACHINE LEARNING
+            </span>
 
-            <p class="lead mb-4">
-                Enter soil and weather parameters to get instant,
-                machine-learning-powered crop recommendations.
-                Manage your predictions and view your history
-                all in one place.
+            <h1>Grow Smarter.<br><span>Harvest Better.</span></h1>
+
+            <p>
+                Discover a suitable crop for your growing conditions using
+                soil nutrients, climate measurements, and machine learning.
+                Make your next planting decision with more confidence.
             </p>
 
-            <!-- Navigation Buttons -->
-            <div class="d-flex flex-wrap gap-2">
-
-                {% if user.is_authenticated and user.is_staff %}
-
-                    <a href="{% url 'admin_dashboard' %}" class="btn btn-light">
-                        <i class="fa-solid fa-gauge me-1"></i>
-                        Admin Dashboard
+            <div class="crop-hero-actions">
+                {% if user.is_authenticated and not user.is_staff and not user.is_superuser %}
+                    <a href="{% url 'predict' %}" class="crop-btn crop-btn-primary">
+                        Get Crop Recommendation
+                        <i class="fa-solid fa-arrow-right"></i>
                     </a>
-
-                    <a href="{% url 'admin_view_users' %}" class="btn btn-outline-light">
-                        <i class="fa-solid fa-users me-1"></i>
-                        Manage Users
-                    </a>
-
                 {% elif user.is_authenticated %}
-
-                    <a href="{% url 'predict' %}" class="btn btn-light">
-                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i>
-                        Predict Now
+                    <a href="{% url 'admin_dashboard' %}" class="crop-btn crop-btn-primary">
+                        Open Admin Dashboard
+                        <i class="fa-solid fa-arrow-right"></i>
                     </a>
-
-                    <a href="{% url 'user_history' %}" class="btn btn-outline-light">
-                        <i class="fa-solid fa-clock-rotate-left me-1"></i>
-                        Prediction History
-                    </a>
-
                 {% else %}
-
-                    <a href="{% url 'login' %}" class="btn btn-light">
-                        <i class="fa-solid fa-right-to-bracket me-1"></i>
-                        User Login
+                    <a href="{% url 'signup' %}" class="crop-btn crop-btn-primary">
+                        Get Started
+                        <i class="fa-solid fa-arrow-right"></i>
                     </a>
-
-                    <a href="{% url 'signup' %}" class="btn btn-outline-light">
-                        <i class="fa-solid fa-user-plus me-1"></i>
-                        Create Account
+                    <a href="{% url 'login' %}" class="crop-btn crop-btn-outline">
+                        Sign In
                     </a>
-
-                    <a href="{% url 'admin_login' %}" class="btn btn-light">
-                        <i class="fa-solid fa-lock me-1"></i>
-                        Admin Login
-                    </a>
-
                 {% endif %}
             </div>
 
-            <!-- Security Message -->
-            <div class="mt-4 small">
-                <i class="fa-solid fa-shield-halved me-1"></i>
-                Your predictions are saved securely in your account.
+            <div class="crop-hero-note">
+                <i class="fa-solid fa-leaf"></i>
+                Soil data. Climate insights. Data-driven crop suggestions.
             </div>
         </div>
+    </section>
 
-        <!-- Hero Image -->
-        <div class="col-lg-5 mt-4 mt-lg-0 text-center">
-            <img
-                src="{% static 'images/carousel2.png' %}"
-                alt="Agriculture and smart crop recommendation"
-                class="img-fluid rounded-4 shadow-lg"
-                style="max-height: 350px;"
-            >
+    <!-- Project Introduction -->
+    <section class="crop-section crop-overview" id="about">
+        <div class="crop-section-heading">
+            <span class="crop-section-label">ABOUT THE PROJECT</span>
+            <h2>A smarter approach to crop selection</h2>
+            <p>
+                The Smart Crop Recommender is a machine-learning web application
+                designed to help users explore crop options based on soil and
+                climate conditions.
+            </p>
         </div>
-    </div>
 
-    <!-- Statistics -->
-    <div class="row g-3 mt-4">
-        <div class="col-sm-6 col-lg-3">
-            <div class="stat-tile">
-                <div class="stat-title">Smart Farming</div>
-                <div class="stat-value">
-                    <i class="fa-solid fa-seedling fa-2x"></i>
+        <div class="crop-overview-grid">
+            <div class="crop-overview-image">
+                <img
+                    src="{% static 'images/fresh-culture-carrots-harvest-farm.jpg' %}"
+                    alt="Freshly harvested carrots on a farm"
+                    loading="lazy"
+                >
+                <div class="crop-image-caption">
+                    <i class="fa-solid fa-seedling"></i>
+                    Better-informed planting decisions
                 </div>
             </div>
-        </div>
 
-        <div class="col-sm-6 col-lg-3">
-            <div class="stat-tile">
-                <div class="stat-title">ML-Powered</div>
-                <div class="stat-value">
-                    <i class="fa-solid fa-brain fa-2x"></i>
+            <div class="crop-overview-copy">
+                <h3>From growing conditions to crop suggestions</h3>
+                <p>
+                    Different crops need different amounts of nutrients,
+                    moisture, and suitable environmental conditions.
+                    This project uses a trained Random Forest model to analyze
+                    seven input measurements and suggest a crop.
+                </p>
+
+                <div class="crop-input-list">
+                    <div><i class="fa-solid fa-check"></i> Nitrogen, phosphorus, and potassium</div>
+                    <div><i class="fa-solid fa-check"></i> Temperature and humidity</div>
+                    <div><i class="fa-solid fa-check"></i> Soil pH and rainfall</div>
                 </div>
+
+                <p class="crop-small-note">
+                    Recommendations depend on the quality of the input data
+                    and the model's training dataset. They are intended as
+                    decision support, not a guarantee of crop yield.
+                </p>
+
+                <a href="{% url 'signup' %}" class="crop-text-link">
+                    Explore the application
+                    <i class="fa-solid fa-arrow-right"></i>
+                </a>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-<!-- Features Section -->
-<section class="mb-5">
-    <div class="text-center mb-4">
-        <h2 class="fw-bold">How It Works</h2>
-        <p class="text-muted">
-            Get crop recommendations using important soil and weather data.
-        </p>
-    </div>
-
-    <div class="row g-4">
-
-        <!-- Step 1 -->
-        <div class="col-md-4">
-            <div class="card h-100 border-0 shadow-sm rounded-4">
-                <div class="card-body p-4 text-center">
-                    <i class="fa-solid fa-flask fa-2x text-success mb-3"></i>
-                    <h5 class="fw-bold">1. Enter Parameters</h5>
-                    <p class="text-muted mb-0">
-                        Provide nitrogen, phosphorus, potassium,
-                        temperature, humidity, soil pH, and rainfall values.
-                    </p>
-                </div>
-            </div>
+    <!-- How It Works -->
+    <section class="crop-section crop-how-section" id="how-it-works">
+        <div class="crop-section-heading">
+            <span class="crop-section-label">HOW IT WORKS</span>
+            <h2>Three simple steps</h2>
+            <p>Turn soil and climate measurements into a crop suggestion.</p>
         </div>
 
-        <!-- Step 2 -->
-        <div class="col-md-4">
-            <div class="card h-100 border-0 shadow-sm rounded-4">
-                <div class="card-body p-4 text-center">
-                    <i class="fa-solid fa-brain fa-2x text-success mb-3"></i>
-                    <h5 class="fw-bold">2. Analyze the Data</h5>
-                    <p class="text-muted mb-0">
-                        The machine learning model analyzes the
-                        provided values to identify a suitable crop.
-                    </p>
+        <div class="crop-steps">
+            <article class="crop-step-card">
+                <div class="crop-step-icon">
+                    <i class="fa-solid fa-flask"></i>
                 </div>
-            </div>
+                <span class="crop-step-number">STEP 01</span>
+                <h3>Enter your data</h3>
+                <p>
+                    Provide soil nutrient levels, pH, temperature, humidity,
+                    and rainfall measurements.
+                </p>
+            </article>
+
+            <article class="crop-step-card">
+                <div class="crop-step-icon">
+                    <i class="fa-solid fa-brain"></i>
+                </div>
+                <span class="crop-step-number">STEP 02</span>
+                <h3>Analyze conditions</h3>
+                <p>
+                    The trained Random Forest model processes your
+                    measurements to identify a suitable crop class.
+                </p>
+            </article>
+
+            <article class="crop-step-card">
+                <div class="crop-step-icon">
+                    <i class="fa-solid fa-seedling"></i>
+                </div>
+                <span class="crop-step-number">STEP 03</span>
+                <h3>View your result</h3>
+                <p>
+                    Review the suggested crop and revisit saved predictions
+                    from your account.
+                </p>
+            </article>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="crop-section crop-features-section" id="features">
+        <div class="crop-section-heading">
+            <span class="crop-section-label">APPLICATION FEATURES</span>
+            <h2>More than a crop prediction</h2>
+            <p>
+                Explore the tools that make this project useful and practical.
+            </p>
         </div>
 
-        <!-- Step 3 -->
-        <div class="col-md-4">
-            <div class="card h-100 border-0 shadow-sm rounded-4">
-                <div class="card-body p-4 text-center">
-                    <i class="fa-solid fa-seedling fa-2x text-success mb-3"></i>
-                    <h5 class="fw-bold">3. Get a Recommendation</h5>
-                    <p class="text-muted mb-0">
-                        View your recommended crop and revisit
-                        your saved predictions whenever you need them.
-                    </p>
+        <div class="crop-feature-grid">
+            <article class="crop-feature-card">
+                <div class="crop-feature-icon">
+                    <i class="fa-solid fa-microchip"></i>
                 </div>
-            </div>
+                <h3>Machine Learning</h3>
+                <p>
+                    A trained Random Forest model uses seven soil and climate
+                    measurements to recommend a crop.
+                </p>
+            </article>
+
+            <article class="crop-feature-card">
+                <div class="crop-feature-icon">
+                    <i class="fa-solid fa-cloud-sun"></i>
+                </div>
+                <h3>Live Weather Option</h3>
+                <p>
+                    The prediction form can retrieve available climate data
+                    for a selected city, with manual inputs as a fallback.
+                </p>
+            </article>
+
+            <article class="crop-feature-card">
+                <div class="crop-feature-icon">
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                </div>
+                <h3>Prediction History</h3>
+                <p>
+                    Signed-in users can revisit their saved crop predictions
+                    and review previous results.
+                </p>
+            </article>
+
+            <article class="crop-feature-card">
+                <div class="crop-feature-icon">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h3>User Accounts</h3>
+                <p>
+                    Account login and protected pages keep each user's
+                    prediction history associated with their account.
+                </p>
+            </article>
+        </div>
+    </section>
+
+    <!-- Call to Action -->
+    <section class="crop-final-cta">
+        <div>
+            <span class="crop-section-label">READY TO EXPLORE?</span>
+            <h2>Start with your soil data.</h2>
+            <p>
+                Create an account to try the crop recommendation system
+                and save your prediction history.
+            </p>
         </div>
 
-    </div>
-</section>
+        {% if user.is_authenticated and not user.is_staff and not user.is_superuser %}
+            <a href="{% url 'predict' %}" class="crop-btn crop-btn-light">
+                Try Crop Prediction
+                <i class="fa-solid fa-arrow-right"></i>
+            </a>
+        {% elif user.is_authenticated %}
+            <a href="{% url 'admin_dashboard' %}" class="crop-btn crop-btn-light">
+                Open Dashboard
+            </a>
+        {% else %}
+            <a href="{% url 'signup' %}" class="crop-btn crop-btn-light">
+                Create Your Account
+                <i class="fa-solid fa-arrow-right"></i>
+            </a>
+        {% endif %}
+    </section>
 
-<!-- Call to Action -->
-{% if not user.is_authenticated %}
-<section class="text-center py-4 mb-4">
-    <h3 class="fw-bold">Ready to Get Started?</h3>
-    <p class="text-muted">
-        Create an account to generate and save your crop predictions.
-    </p>
-
-    <a href="{% url 'signup' %}" class="btn btn-success btn-lg">
-        <i class="fa-solid fa-user-plus me-2"></i>
-        Create Your Account
-    </a>
-</section>
-{% endif %}
-
+</div>
 {% endblock %}

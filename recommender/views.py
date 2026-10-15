@@ -1,4 +1,3 @@
-
 import logging
 import math
 
@@ -85,7 +84,7 @@ def validate_crop_inputs(data):
         "rainfall",
     )
 
-    # Check that every required measurement exists and is numeric.
+    # Ensure all required measurements are present and numeric.
     for field in required_fields:
         if field not in data:
             raise ValueError(
@@ -103,7 +102,7 @@ def validate_crop_inputs(data):
                 f"{field} must be a valid finite number."
             )
 
-    # Explicitly reject an entirely zero-filled submission.
+    # Reject an entirely zero-filled submission.
     if all(data[field] == 0 for field in required_fields):
         raise ValueError(
             "All inputs cannot be zero. "
@@ -111,7 +110,7 @@ def validate_crop_inputs(data):
         )
 
     # Common Crop Recommendation dataset ranges.
-    # Verify these against the CSV used to train your model.
+    # Verify these against the dataset used to train your model.
     nutrient_limits = {
         "N": (0, 140),
         "P": (5, 145),
@@ -148,7 +147,7 @@ def validate_crop_inputs(data):
 
 
 def save_prediction_if_logged_in(request, inputs, crop):
-    """Save a prediction only for an authenticated, non-staff user."""
+    """Save predictions only for authenticated, non-staff users."""
 
     if (
         not request.user.is_authenticated
@@ -184,8 +183,8 @@ def get_prediction_bundle():
 # ---------------------------------------------------------
 
 def home(request):
-    """Display the crop prediction page."""
-    return predict_view(request)
+    """Display the public project overview landing page."""
+    return render(request, "recommender/home.html")
 
 
 # ---------------------------------------------------------
@@ -466,7 +465,7 @@ def predict_view(request):
                 "rainfall": rainfall,
             }
 
-            # All validation must finish before prediction or saving.
+            # Validate before prediction or saving.
             validate_crop_inputs(inputs)
 
             bundle = get_prediction_bundle()
@@ -487,7 +486,7 @@ def predict_view(request):
                     "The model did not return a valid crop recommendation."
                 )
 
-            # Save only after input validation and successful prediction.
+            # Save only after validation and successful prediction.
             save_prediction_if_logged_in(
                 request,
                 inputs,
